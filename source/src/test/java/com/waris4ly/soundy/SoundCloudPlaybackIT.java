@@ -34,6 +34,9 @@ class SoundCloudPlaybackIT {
     private static final String TRACK_URL =
             System.getProperty("soundy.it.track", "https://soundcloud.com/jhfly/poetic-justice");
 
+    private static final String PLAYLIST_URL =
+            System.getProperty("soundy.it.playlist", "https://soundcloud.com/jhfly/sets/goat");
+
     private static final long MIN_FRAMES = Long
             .parseLong(System.getProperty("soundy.it.minFrames", "50")); // 50 frames = 1s of audio
 
@@ -130,6 +133,25 @@ class SoundCloudPlaybackIT {
             assertNotNull(item, "scsearch should return a playlist");
         } catch (Exception e) {
             throw new AssertionError("scsearch failed", e instanceof FriendlyException ? e.getCause() : e);
+        } finally {
+            manager.shutdown();
+        }
+    }
+
+    @Test
+    void loadsWholePlaylist() throws Exception {
+        AudioPlayerManager manager = new DefaultAudioPlayerManager();
+        manager.registerSourceManager(new SoundySourceManager());
+
+        CompletableFuture<AudioItem> loaded = new CompletableFuture<>();
+        manager.loadItem(new AudioReference(PLAYLIST_URL, null), resultHandler(loaded));
+
+        try {
+            AudioItem item = loaded.get(60, TimeUnit.SECONDS);
+            assertTrue(item instanceof AudioPlaylist, "expected a playlist, got: " + item);
+            // SoundCloud inlines only the first 5 tracks; the rest arrive as id-only stubs.
+            int tracks = ((AudioPlaylist) item).getTracks().size();
+            assertTrue(tracks > 5, "expected the stub tracks to be loaded too, got " + tracks);
         } finally {
             manager.shutdown();
         }

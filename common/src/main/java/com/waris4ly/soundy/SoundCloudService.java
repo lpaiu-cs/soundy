@@ -7,9 +7,14 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SoundCloudService {
+
+    // SoundCloud answers HTTP 400 when /tracks is asked for more ids than this.
+    private static final int TRACKS_PER_REQUEST = 50;
 
     private final SoundCloudHttpClient client;
     private final TrackParser trackParser = new TrackParser();
@@ -27,7 +32,7 @@ public class SoundCloudService {
 
         return switch (kind) {
             case "track" -> trackParser.parse(data);
-            case "playlist" -> playlistParser.parse(data);
+            case "playlist" -> playlistParser.parse(data, fetchStubTracks(http, data));
             default -> throw new IOException("Unsupported resource kind '" + kind + "' for: " + url);
         };
     }
@@ -106,5 +111,28 @@ public class SoundCloudService {
             throw new IOException("Empty stream URL from: " + transcodingUrl);
         }
         return url;
+    }
+
+    /**
+     * Playlists only inline their first few tracks; the rest come back as
+     * id-only stubs, so look those up by id.
+     */
+    private Map<Long, JsonBrowser> fetchStubTracks(HttpInterface http, JsonBrowser playlist) throws IOException {
+        List<String> ids = new ArrayList<>();
+        for (JsonBrowser track : playlist.get("tracks").values()) {
+            if (track.get("title").isNull()) {
+                ids.add(track.get("id").text());
+            }
+        }
+
+        Map<Long, JsonBrowser> tracks = new HashMap<>();
+        for (int i = 0; i < ids.size(); i += TRACKS_PER_REQUEST) {
+            List<String> batch = ids.subList(i, Math.min(i + TRACKS_PER_REQUEST, ids.size()));
+            String json = client.get(http, "/tracks?ids=" + String.join(",", batch));
+            for (JsonBrowser track : JsonBrowser.parse(json).values()) {
+                tracks.put(track.get("id").asLong(0), track);
+            }
+        }
+        return tracks;
     }
 }
