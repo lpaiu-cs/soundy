@@ -14,7 +14,7 @@ public class TrackParser {
         boolean streamable = track.get("streamable").asBoolean(false);
         
         String policy = track.get("policy").text();
-        boolean isPreview = "SNIPPED".equalsIgnoreCase(policy);
+        boolean isPreview = "SNIP".equalsIgnoreCase(policy);
 
         return new TrackData(id, title, permalinkUrl, duration,
                 upgradeArtwork(artworkUrl),
